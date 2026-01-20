@@ -1,0 +1,547 @@
+index.html
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Sprite Fight (Background)</title>
+<style>
+  body{margin:0;font-family:system-ui;background:#0b0d12;color:#e8ecff}
+  .wrap{max-width:980px;margin:0 auto;padding:14px;display:grid;gap:12px}
+  h1{font-size:18px;margin:0}
+  .small{color:#aab3d6;font-size:13px}
+  .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.10);border-radius:16px;padding:12px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end;justify-content:space-between}
+  select,button{
+    padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.12);
+    background:rgba(0,0,0,.35);color:#fff;font-weight:900
+  }
+  button{cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  canvas{
+    width:100%;height:auto;border:1px solid rgba(255,255,255,.10);border-radius:16px;
+    background:rgba(0,0,0,.25);image-rendering:pixelated
+  }
+  .grid{display:grid;gap:10px;grid-template-columns:1fr 1fr}
+  .hpBox{display:grid;gap:6px}
+  .hpRow{display:flex;justify-content:space-between;align-items:center}
+  .bar{height:12px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;border:1px solid rgba(255,255,255,.10)}
+  .fill{height:100%;width:100%}
+  .btns{display:grid;gap:10px;grid-template-columns:1fr 1fr;margin-top:10px}
+  .msg{font-weight:900}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row">
+    <div>
+      <h1>⚔️ Sprite Fight</h1>
+      <div class="small">Auto-crop ✅ • Fight ✅ • Audio SFX ✅ • Background ✅</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+      <button id="audioBtn">🔊 Zvuk: ON</button>
+      <select id="volSel" title="Hlasitost">
+        <option value="0.25">25%</option>
+        <option value="0.5">50%</option>
+        <option value="0.75" selected>75%</option>
+        <option value="1">100%</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <div class="small">Ty</div>
+        <select id="pSel"></select>
+      </div>
+      <div>
+        <div class="small">Soupeř</div>
+        <select id="eSel"></select>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button id="start">▶ Start</button>
+        <button id="reset">🔁 Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="grid">
+      <div class="hpBox">
+        <div class="hpRow">
+          <div class="msg" id="pName">—</div>
+          <div class="small" id="pHPtxt">HP: —</div>
+        </div>
+        <div class="bar"><div class="fill" id="pBar"></div></div>
+      </div>
+
+      <div class="hpBox">
+        <div class="hpRow">
+          <div class="msg" id="eName" style="text-align:right">—</div>
+          <div class="small" id="eHPtxt" style="text-align:right">HP: —</div>
+        </div>
+        <div class="bar"><div class="fill" id="eBar"></div></div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <canvas id="cv" width="640" height="360"></canvas>
+    </div>
+
+    <div class="btns">
+      <button id="atk">⚔️ Útok</button>
+      <button id="spc">✨ Speciál</button>
+      <button id="heal">🧪 Heal</button>
+      <button id="taunt">😈 Taunt</button>
+    </div>
+
+    <div class="small" id="log" style="margin-top:10px">Klikni Start…</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id)=>document.getElementById(id);
+  const cv=$("cv"), ctx=cv.getContext("2d");
+  ctx.imageSmoothingEnabled=false;
+
+  const FILES = {
+    anakin: "anakin",
+    vader:  "darth vader",
+    kylo:   "kylo ren",
+    luke:   "luke skywalker",
+    mace:   "mace windu",
+    mando:  "mandalorian",
+    obi:    "obi wan",
+    yoda:   "yoda",
+  };
+
+  const CHARS = [
+    {id:"anakin", name:"Anakin", saber:"b", hp:100},
+    {id:"obi",    name:"Obi-Wan",saber:"b", hp:100},
+    {id:"luke",   name:"Luke",   saber:"g", hp:100},
+    {id:"yoda",   name:"Yoda",   saber:"g", hp:95},
+    {id:"mace",   name:"Mace",   saber:"p", hp:105},
+    {id:"mando",  name:"Mandalorian", saber:"b", hp:115},
+    {id:"kylo",   name:"Kylo",   saber:"r", hp:110},
+    {id:"vader",  name:"Vader",  saber:"r", hp:120},
+  ];
+
+  // ===== Text hlášky (SW vibe, ne originál) =====
+  const WIN_LINES = {
+    "Obi-Wan": ["Klid. A hotovo.", "Takhle se bojuje s rozumem."],
+    "Anakin": ["Vyhráno! Dneska jo.", "Síla je se mnou!"],
+    "Vader": ["Temnota vyhrává.", "Slabost byla tvá chyba."],
+    "Luke": ["Dobro vyhrává!", "Tohle bylo těsný!"],
+    "Yoda": ["Vyhrál jsem. Hihi.", "Trpělivost stačí."],
+    "Mace": ["Disciplína vítězí.", "Další soupeř?"],
+    "Kylo": ["VÍTĚZSTVÍ!", "Chaos… ale funguje."],
+    "Mandalorian": ["Tohle je cesta.", "Kontrakt splněn."]
+  };
+  const LOSE_LINES = [
+    "Zkus to znovu. Tentokrát líp. 😄",
+    "Tohle bolelo… ale GG.",
+    "Příště víc healů, míň paniky.",
+    "Kdo spammuje speciál, ten trpí."
+  ];
+  const randPick = (arr)=>arr[Math.floor(Math.random()*arr.length)];
+  const winLine  = (name)=>randPick(WIN_LINES[name] || ["GG."]);
+
+  // ===== Audio SFX (pípání) =====
+  let audioOn = true;
+  function volume(){ return parseFloat($("volSel").value || "0.75"); }
+
+  function beep(freq=440, ms=120, type="square", vol=0.06){
+    if(!audioOn) return;
+    try{
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ac = new AC();
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      g.gain.value = vol * volume();
+      o.connect(g); g.connect(ac.destination);
+      o.start();
+      setTimeout(()=>{ o.stop(); ac.close(); }, ms);
+    }catch(e){}
+  }
+  function sfxAttack(){ beep(520, 90, "square", 0.06); setTimeout(()=>beep(780, 80, "square", 0.05), 70); }
+  function sfxSpecial(){ beep(300, 80, "sawtooth", 0.07); setTimeout(()=>beep(950, 120, "sawtooth", 0.06), 90); }
+  function sfxHeal(){ beep(660, 80, "triangle", 0.05); setTimeout(()=>beep(880, 110, "triangle", 0.05), 70); }
+  function sfxWin(){ beep(523,120,"triangle",0.06); setTimeout(()=>beep(659,120,"triangle",0.06),130); setTimeout(()=>beep(784,140,"triangle",0.07),260); }
+  function sfxLose(){ beep(392,150,"sine",0.06); setTimeout(()=>beep(311,170,"sine",0.06),160); setTimeout(()=>beep(247,200,"sine",0.07),340); }
+
+  $("audioBtn").onclick = ()=>{
+    audioOn = !audioOn;
+    $("audioBtn").textContent = audioOn ? "🔊 Zvuk: ON" : "🔇 Zvuk: OFF";
+    if(audioOn) beep(660,80,"triangle",0.05);
+  };
+
+  // ===== Auto-crop sprites =====
+  function imgToCanvas(img){
+    const c=document.createElement("canvas");
+    c.width=img.naturalWidth||img.width;
+    c.height=img.naturalHeight||img.height;
+    c.getContext("2d").drawImage(img,0,0);
+    return c;
+  }
+  function cropBoxFromCanvas(c){
+    const g=c.getContext("2d");
+    const w=c.width,h=c.height;
+    const d=g.getImageData(0,0,w,h).data;
+
+    let minX=w,minY=h,maxX=-1,maxY=-1;
+    const aT=10;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const a=d[(y*w+x)*4+3];
+        if(a>aT){
+          if(x<minX)minX=x; if(y<minY)minY=y;
+          if(x>maxX)maxX=x; if(y>maxY)maxY=y;
+        }
+      }
+    }
+    if(maxX===-1){
+      minX=w;minY=h;maxX=-1;maxY=-1;
+      const white=245,dark=12;
+      for(let y=0;y<h;y++){
+        for(let x=0;x<w;x++){
+          const i=(y*w+x)*4;
+          const r=d[i],gg=d[i+1],b=d[i+2];
+          const nearWhite=(r>white&&gg>white&&b>white);
+          const nearBlack=(r<dark&&gg<dark&&b<dark);
+          if(!nearWhite && !nearBlack){
+            if(x<minX)minX=x; if(y<minY)minY=y;
+            if(x>maxX)maxX=x; if(y>maxY)maxY=y;
+          }
+        }
+      }
+    }
+    if(maxX===-1) return {x:0,y:0,w:w,h:h};
+    const pad=2;
+    minX=Math.max(0,minX-pad); minY=Math.max(0,minY-pad);
+    maxX=Math.min(w-1,maxX+pad); maxY=Math.min(h-1,maxY+pad);
+    return {x:minX,y:minY,w:(maxX-minX+1),h:(maxY-minY+1)};
+  }
+  function makeCroppedCanvas(img){
+    const src=imgToCanvas(img);
+    const box=cropBoxFromCanvas(src);
+    const out=document.createElement("canvas");
+    out.width=box.w; out.height=box.h;
+    out.getContext("2d").drawImage(src, box.x,box.y,box.w,box.h, 0,0,box.w,box.h);
+    return out;
+  }
+
+  // ===== Load images (sprites + background) =====
+  const sprites={};
+  let bgImg = null;
+
+  async function loadImageAny(base){
+    for(const ext of ["png","jpg","jpeg"]){
+      const src=`${base}.${ext}`;
+      const img=await new Promise(res=>{
+        const im=new Image();
+        im.onload=()=>res(im);
+        im.onerror=()=>res(null);
+        im.src=src;
+      });
+      if(img) return img;
+    }
+    return null;
+  }
+
+  async function loadAll(){
+    // background optional: bg.png/jpg/jpeg
+    bgImg = await loadImageAny("bg"); // <— dej do složky bg.png / bg.jpg
+    // sprites
+    for(const key in FILES){
+      const img=await loadImageAny(FILES[key]);
+      if(!img) throw new Error(`Nenašel jsem: ${FILES[key]}.png/jpg/jpeg`);
+      sprites[key]=makeCroppedCanvas(img);
+    }
+  }
+
+  // draw bg "cover"
+  function drawCover(img){
+    const cw=cv.width, ch=cv.height;
+    const iw=img.naturalWidth||img.width;
+    const ih=img.naturalHeight||img.height;
+
+    const scale = Math.max(cw/iw, ch/ih);
+    const w = Math.ceil(iw*scale);
+    const h = Math.ceil(ih*scale);
+    const x = Math.floor((cw - w)/2);
+    const y = Math.floor((ch - h)/2);
+
+    ctx.drawImage(img, x, y, w, h);
+  }
+
+  // ===== UI =====
+  function fillSelect(sel){
+    sel.innerHTML="";
+    CHARS.forEach(c=>{
+      const o=document.createElement("option");
+      o.value=c.id; o.textContent=c.name;
+      sel.appendChild(o);
+    });
+  }
+  fillSelect($("pSel")); fillSelect($("eSel"));
+  $("pSel").value="mace";
+  $("eSel").value="obi";
+
+  const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+  const rand=(a,b)=>Math.floor(a+Math.random()*(b-a+1));
+  function saberColor(s){
+    if(s==="g") return "#4cff88";
+    if(s==="r") return "#ff4c7a";
+    if(s==="p") return "#b48cff";
+    return "#2bbdff";
+  }
+  function beam(x1,y1,x2,y2,color){
+    ctx.save(); ctx.lineCap="round";
+    ctx.globalAlpha=0.20; ctx.lineWidth=18; ctx.strokeStyle=color;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.globalAlpha=0.85; ctx.lineWidth=10; ctx.strokeStyle=color;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.globalAlpha=1; ctx.lineWidth=4; ctx.strokeStyle="#fff";
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ===== Game =====
+  let P=null,E=null,pHP=0,eHP=0,busy=false,winner=null,shakeT=0,lastBeam=null;
+
+  function log(t){ $("log").textContent=t; }
+
+  function setUI(){
+    if(!P||!E){
+      $("pName").textContent="—"; $("eName").textContent="—";
+      $("pHPtxt").textContent="HP: —"; $("eHPtxt").textContent="HP: —";
+      $("pBar").style.width="0%"; $("eBar").style.width="0%";
+    } else {
+      $("pName").textContent=P.name; $("eName").textContent=E.name;
+      $("pHPtxt").textContent=`HP: ${pHP}`; $("eHPtxt").textContent=`HP: ${eHP}`;
+      $("pBar").style.width = `${clamp(pHP,0,P.maxHP)/P.maxHP*100}%`;
+      $("eBar").style.width = `${clamp(eHP,0,E.maxHP)/E.maxHP*100}%`;
+      $("pBar").style.background=saberColor(P.saber);
+      $("eBar").style.background=saberColor(E.saber);
+    }
+    const dis=(!P||!E||busy||winner);
+    $("atk").disabled=dis; $("spc").disabled=dis; $("heal").disabled=dis; $("taunt").disabled=dis;
+  }
+
+  function drawSprite(id,x,y,flip=false){
+    const sp=sprites[id]; if(!sp) return;
+    const box=160;
+    const scale=Math.min(box/sp.width, box/sp.height);
+    const W=Math.floor(sp.width*scale), H=Math.floor(sp.height*scale);
+    const dx=x+Math.floor((150-W)/2), dy=y+Math.floor((150-H)/2);
+
+    if(flip){
+      ctx.save(); ctx.translate(dx+W,dy); ctx.scale(-1,1);
+      ctx.drawImage(sp,0,0,W,H); ctx.restore();
+    } else ctx.drawImage(sp,dx,dy,W,H);
+  }
+
+  function endCheck(){
+    if(pHP<=0){
+      winner=E.name;
+      sfxLose();
+      log(`💀 ${P.name} padl. ${E.name} vyhrál. "${winLine(E.name)}"  |  ${randPick(LOSE_LINES)}`);
+      setUI();
+      return true;
+    }
+    if(eHP<=0){
+      winner=P.name;
+      sfxWin();
+      log(`🏆 ${P.name} vyhrál! "${winLine(P.name)}"`);
+      setUI();
+      return true;
+    }
+    return false;
+  }
+
+  function doDamage(target,dmg){
+    if(target==="E") eHP=clamp(eHP-dmg,0,E.maxHP);
+    else pHP=clamp(pHP-dmg,0,P.maxHP);
+    shakeT=12;
+    setUI();
+  }
+
+  async function aiTurn(){
+    if(winner) return;
+    busy=true; setUI();
+    await new Promise(r=>setTimeout(r,350));
+
+    if(eHP<=25 && Math.random()<0.55){
+      sfxHeal();
+      const h=rand(10,18);
+      eHP=clamp(eHP+h,0,E.maxHP);
+      log(`🤖 ${E.name} HEAL (+${h}).`);
+      setUI();
+      await new Promise(r=>setTimeout(r,250));
+      busy=false; setUI();
+      return;
+    }
+
+    const special=Math.random()<0.35;
+    lastBeam={from:"E", t:performance.now()};
+
+    if(special){
+      sfxSpecial();
+      const dmg=rand(14,22);
+      log(`💥 ${E.name} SPECIÁL (-${dmg}).`);
+      doDamage("P",dmg);
+    } else {
+      sfxAttack();
+      const dmg=rand(8,14);
+      log(`⚔️ ${E.name} útočí (-${dmg}).`);
+      doDamage("P",dmg);
+    }
+    endCheck();
+    busy=false; setUI();
+  }
+
+  function startGame(){
+    winner=null;
+    const pPick=CHARS.find(x=>x.id===$("pSel").value);
+    const ePick=CHARS.find(x=>x.id===$("eSel").value);
+    P={...pPick,maxHP:pPick.hp};
+    E={...ePick,maxHP:ePick.hp};
+    pHP=P.maxHP; eHP=E.maxHP;
+    log(`Start! ${P.name} vs ${E.name} 😈`);
+    setUI();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,cv.width,cv.height);
+
+    // BACKGROUND
+    if(bgImg){
+      drawCover(bgImg);
+      // lehký "darken" overlay aby byly postavy čitelné
+      ctx.fillStyle="rgba(0,0,0,.35)";
+      ctx.fillRect(0,0,cv.width,cv.height);
+    } else {
+      // fallback bg
+      ctx.fillStyle="#0f1220"; ctx.fillRect(0,0,cv.width,cv.height);
+      ctx.fillStyle="rgba(255,255,255,.08)";
+      for(let i=0;i<60;i++) ctx.fillRect((i*97)%640,(i*57)%360,1,1);
+    }
+
+    // ground
+    ctx.fillStyle="rgba(0,0,0,.35)";
+    ctx.fillRect(0,250,640,110);
+
+    if(!P||!E){
+      ctx.fillStyle="#fff"; ctx.font="bold 18px system-ui";
+      ctx.fillText("Vyber postavy a dej Start", 190, 180);
+      return;
+    }
+
+    let sx=0,sy=0;
+    if(shakeT>0){ sx=rand(-4,4); sy=rand(-3,3); shakeT--; }
+    ctx.save(); ctx.translate(sx,sy);
+
+    drawSprite(P.id, 90, 100, false);
+    drawSprite(E.id, 640-90-150, 100, true);
+
+    if(lastBeam){
+      const t=performance.now()-lastBeam.t;
+      if(t<220){
+        if(lastBeam.from==="P"){
+          beam(90+150, 100+85, 90+150+155, 100+65, saberColor(P.saber));
+        } else {
+          beam(640-90-150, 100+85, 640-90-150-155, 100+65, saberColor(E.saber));
+        }
+      } else lastBeam=null;
+    }
+    ctx.restore();
+
+    if(winner){
+      ctx.fillStyle="rgba(0,0,0,.55)"; ctx.fillRect(0,0,640,360);
+      ctx.fillStyle="#fff"; ctx.font="bold 34px system-ui";
+      ctx.fillText(`${winner} WINS`, 210, 180);
+      ctx.font="bold 16px system-ui";
+      ctx.fillText(`Klikni Reset a zkus to znovu 😄`, 205, 215);
+    }
+  }
+
+  function loop(){ draw(); requestAnimationFrame(loop); }
+
+  $("start").onclick=()=>{
+    beep(660,40,"triangle",0.04);
+    startGame();
+  };
+  $("reset").onclick=()=>{
+    P=null;E=null;winner=null;pHP=0;eHP=0;lastBeam=null;
+    log("Klikni Start…");
+    setUI();
+  };
+
+  $("atk").onclick=async ()=>{
+    if(!P||!E||busy||winner) return;
+    busy=true; setUI();
+    sfxAttack();
+    lastBeam={from:"P", t:performance.now()};
+    const dmg=rand(8,14);
+    log(`⚔️ ${P.name} útočí (-${dmg}).`);
+    doDamage("E",dmg);
+    if(endCheck()){ busy=false; setUI(); return; }
+    busy=false; setUI();
+    await aiTurn();
+  };
+
+  $("spc").onclick=async ()=>{
+    if(!P||!E||busy||winner) return;
+    busy=true; setUI();
+    sfxSpecial();
+    lastBeam={from:"P", t:performance.now()};
+    const dmg=rand(14,22);
+    log(`✨ ${P.name} SPECIÁL (-${dmg}).`);
+    doDamage("E",dmg);
+    if(endCheck()){ busy=false; setUI(); return; }
+    busy=false; setUI();
+    await aiTurn();
+  };
+
+  $("heal").onclick=async ()=>{
+    if(!P||!E||busy||winner) return;
+    busy=true; setUI();
+    sfxHeal();
+    const h=rand(10,18);
+    pHP=clamp(pHP+h,0,P.maxHP);
+    log(`🧪 ${P.name} HEAL (+${h}).`);
+    setUI();
+    await new Promise(r=>setTimeout(r,250));
+    busy=false; setUI();
+    await aiTurn();
+  };
+
+  $("taunt").onclick=async ()=>{
+    if(!P||!E||busy||winner) return;
+    busy=true; setUI();
+    beep(220,90,"square",0.04);
+    const lines=["Skill issue detected 😄","Tvoje obrana je jak papír.","Tohle není tutorial, kámo.","Mám lepší ping než ty."];
+    log(`😈 ${P.name}: "${lines[Math.floor(Math.random()*lines.length)]}"`);
+    await new Promise(r=>setTimeout(r,250));
+    busy=false; setUI();
+    await aiTurn();
+  };
+
+  (async ()=>{
+    try{
+      await loadAll();
+      setUI();
+      loop();
+      if(!bgImg) log("Klikni Start… (Tip: hoď do složky bg.png pro vlastní pozadí)");
+    }catch(e){
+      alert("Chyba: " + e.message);
+    }
+  })();
+})();
+</script>
+</body>
+</html>
